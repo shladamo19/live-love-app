@@ -1,193 +1,174 @@
-require('dotenv').config();
+// index.js
 const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
+const cors = require('cors');
+const mongoose = require('mongoose');
+require('dotenv').config();
 
+const app = express();
+app.use(cors());
 app.use(express.json());
 
-// Helper: pick random from array or weighted
-function randomChoice(arr, weights) {
-  if (!arr.length) return null;
-  if (!weights) return arr[Math.floor(Math.random() * arr.length)];
-  const total = weights.reduce((a, b) => a + b, 0);
-  let r = Math.random() * total;
-  for (let i = 0; i < arr.length; i++) {
-    r -= weights[i];
-    if (r < 0) return arr[i];
-  }
-  return arr[0];
-}
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log('MongoDB connected'))
+.catch(err => console.error('MongoDB connection error:', err));
 
-// Cosmic placeholder (expand later)
-function getCosmicTag() {
-  const hr = new Date().getHours();
-  return hr >= 18 || hr < 5 ? 'night' : 'day';
-}
+// ===== Schemas =====
 
-// Mood data with expanded fields
-const moodData = {
-  anxious: {
-    next: ['calm', 'centered'],
-    music: ['37i9dQZF1DX3Ogo9pFvBkY'], // lofi hip hop
-    food: ['chamomile tea', 'warm milk'],
-    mantra: ['You are safe. You are loved.'],
-    breathwork: ['4-7-8 breathing: inhale 4s, hold 7s, exhale 8s'],
-    activity: ['light stretching', 'short walk outside']
+// User schema - store user info, zodiac, biometrics, etc.
+const UserSchema = new mongoose.Schema({
+  name: String,
+  birthdate: Date,
+  zodiacSign: String,
+  biometrics: {
+    heartRate: Number,
+    sleepHours: Number,
+    // add more as needed
   },
-  calm: {
-    next: ['centered', 'energized'],
-    music: ['37i9dQZF1DX4WYpdgoIcn6'], // chill hits
-    food: ['green tea', 'cucumber slices'],
-    mantra: ['I breathe in peace, exhale tension.'],
-    breathwork: ['box breathing: inhale 4s, hold 4s, exhale 4s, hold 4s'],
-    activity: ['meditation', 'journaling']
-  },
-  sad: {
-    next: ['uplifted', 'happy'],
-    music: ['37i9dQZF1DX3rxVfibe1L0'], // happy beats
-    food: ['dark chocolate', 'berries'],
-    mantra: ['Joy finds me now.'],
-    breathwork: ['deep belly breaths: slow and steady'],
-    activity: ['calling a friend', 'creative drawing']
-  },
-  tired: {
-    next: ['energized', 'calm'],
-    music: ['37i9dQZF1DX1s9knjP51Oa'], // ambient focus
-    food: ['orange slices', 'water'],
-    mantra: ['Today is full of potential.'],
-    breathwork: ['alternate nostril breathing'],
-    activity: ['power nap', 'gentle yoga']
-  },
-  angry: {
-    next: ['balanced', 'calm'],
-    music: ['37i9dQZF1DX4WYpdgoIcn6'], // chill hits
-    food: ['cool water', 'mint leaves'],
-    mantra: ['I breathe out tension.'],
-    breathwork: ['slow exhales with hand on belly'],
-    activity: ['punching pillow', 'boxing shadowboxing']
-  },
-  bored: {
-    next: ['curious', 'energized'],
-    music: ['37i9dQZF1DWYBO1MoTDhZI'], // ambient
-    food: ['peppermint gum', 'carrot sticks'],
-    mantra: ['Wonder is everywhere.'],
-    breathwork: ['mindful breathing with counting'],
-    activity: ['reading a new book', 'brainstorming ideas']
-  },
-  happy: {
-    next: ['radiant', 'joyful'],
-    music: ['37i9dQZF1DXdPec7aLTmlC'], // upbeat pop
-    food: ['strawberries', 'fresh juice'],
-    mantra: ['Let this love ripple out.'],
-    breathwork: ['light fast breaths for energy'],
-    activity: ['dancing', 'singing aloud']
-  },
-  overwhelmed: {
-    next: ['centered', 'calm'],
-    music: ['37i9dQZF1DWU0ScTcjJBdj'], // relaxing spa
-    food: ['lavender tea', 'nuts'],
-    mantra: ['One breath at a time.'],
-    breathwork: ['progressive muscle relaxation'],
-    activity: ['slow walk', 'list making']
-  },
-  centered: {
-    next: ['energized', 'calm'],
-    music: ['37i9dQZF1DX4WYpdgoIcn6'],
-    food: ['water', 'fruit salad'],
-    mantra: ['Be here now.'],
-    breathwork: ['steady breathing'],
-    activity: ['mindful observation', 'gentle stretches']
-  },
-  energized: {
-    next: ['joyful', 'radiant'],
-    music: ['37i9dQZF1DX1s9knjP51Oa'],
-    food: ['banana', 'smoothie'],
-    mantra: ['I am ready for today.'],
-    breathwork: ['quick breaths to boost energy'],
-    activity: ['jumping jacks', 'sun salutations']
-  },
-  joyful: {
-    next: ['radiant', 'happy'],
-    music: ['37i9dQZF1DXdPec7aLTmlC'],
-    food: ['mango', 'coconut water'],
-    mantra: ['Joy fills every cell.'],
-    breathwork: ['deep joyful sighs'],
-    activity: ['laughing', 'playing a game']
-  },
-  radiant: {
-    next: ['joyful', 'happy'],
-    music: ['37i9dQZF1DXdPec7aLTmlC'],
-    food: ['pineapple', 'herbal tea'],
-    mantra: ['I shine bright and free.'],
-    breathwork: ['energizing breath cycles'],
-    activity: ['creative expression', 'sunbathing']
-  },
-  curious: {
-    next: ['energized', 'happy'],
-    music: ['37i9dQZF1DWYBO1MoTDhZI'],
-    food: ['trail mix', 'fresh fruit'],
-    mantra: ['Every moment is a new discovery.'],
-    breathwork: ['focused inhalations'],
-    activity: ['learning something new', 'exploring outside']
-  },
-};
+  createdAt: { type: Date, default: Date.now },
+});
+const User = mongoose.model('User', UserSchema);
 
-// Helper: blend arrays from multiple moods, de-dupe
-function blendProps(moodList, prop) {
-  const combined = moodList.flatMap(m => (moodData[m] && moodData[m][prop]) || []);
-  // unique
-  return [...new Set(combined)];
-}
+// Mood schema - user mood and combo moods
+const MoodSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  mood: String,
+  comboMoods: [String],
+  timestamp: { type: Date, default: Date.now },
+});
+const Mood = mongoose.model('Mood', MoodSchema);
 
-app.get('/', (_, res) => res.send('Live backend with mood combos and breathwork!'));
+// Recommendation schema - music, food, activities, breath work
+const RecommendationSchema = new mongoose.Schema({
+  moods: [String], // moods this recommendation applies to
+  music: [String], // song titles or URLs (Spotify, Apple Music)
+  food: [String],
+  activities: [String],
+  breathWork: [String], // descriptions or links
+});
+const Recommendation = mongoose.model('Recommendation', RecommendationSchema);
 
-app.post('/shift', (req, res) => {
-  let { mood = '', user = 'friend' } = req.body;
-  mood = mood.toLowerCase().trim();
+// Article schema - science, spirituality, quantum physics
+const ArticleSchema = new mongoose.Schema({
+  category: String, // 'science', 'spirituality', 'quantum'
+  title: String,
+  url: String,
+});
+const Article = mongoose.model('Article', ArticleSchema);
 
-  // Support combo moods separated by commas
-  const moods = mood.split(',').map(m => m.trim()).filter(m => moodData[m]);
-
-  if (moods.length === 0) {
-    // default if none match
-    moods.push('overwhelmed');
+// ===== Sample Data Seeder (run once or via separate script) =====
+async function seedData() {
+  const count = await Recommendation.countDocuments();
+  if (count === 0) {
+    await Recommendation.insertMany([
+      {
+        moods: ['anxious', 'stressed'],
+        music: ['Calm Vibes Playlist - Spotify', 'Relaxing Piano - Apple Music'],
+        food: ['Drink water', 'Eat light snacks like nuts or fruit'],
+        activities: ['Breath work exercises (see /breathwork)', 'Get sunlight', 'Take a short walk'],
+        breathWork: ['4-7-8 breathing technique', 'Box breathing'],
+      },
+      {
+        moods: ['happy', 'energetic'],
+        music: ['Upbeat Pop Hits - Spotify', 'Feel Good Mix - Apple Music'],
+        food: ['Eat protein-rich foods', 'Hydrate well'],
+        activities: ['Dance or move your body', 'Socialize with friends', 'Start a hobby'],
+        breathWork: ['Energizing breath sequences'],
+      },
+      // Add more mood combos here
+    ]);
+    console.log('Seeded Recommendations');
   }
 
-  // Blend all properties
-  const nextMoodCandidates = blendProps(moods, 'next');
-  const musicChoices = blendProps(moods, 'music');
-  const foodChoices = blendProps(moods, 'food');
-  const mantraChoices = blendProps(moods, 'mantra');
-  const breathworkChoices = blendProps(moods, 'breathwork');
-  const activityChoices = blendProps(moods, 'activity');
+  const articleCount = await Article.countDocuments();
+  if (articleCount === 0) {
+    await Article.insertMany([
+      { category: 'science', title: 'How Energy Affects Reality', url: 'https://example.com/science-energy' },
+      { category: 'spirituality', title: 'Harnessing Love and Good Vibes', url: 'https://example.com/spirituality-love' },
+      { category: 'quantum', title: 'Quantum Physics and Consciousness', url: 'https://example.com/quantum-consciousness' },
+    ]);
+    console.log('Seeded Articles');
+  }
+}
+// Run seeder once when server starts
+seedData().catch(console.error);
 
-  // Randomly pick one from blended lists
-  const nextMood = randomChoice(nextMoodCandidates);
-  const music = randomChoice(musicChoices);
-  const food = randomChoice(foodChoices);
-  const mantra = randomChoice(mantraChoices);
-  const breathwork = randomChoice(breathworkChoices);
-  const activity = randomChoice(activityChoices);
+// ===== Routes =====
 
-  // Cosmic tag for future dynamic influence
-  const cosmicTag = getCosmicTag();
+// Get mood recommendations for a given mood or combo moods
+app.get('/api/recommendations', async (req, res) => {
+  try {
+    const { mood, combo } = req.query; // mood=anxious&combo=stressed,calm
+    let moodsToMatch = [];
 
+    if (mood) moodsToMatch.push(mood.toLowerCase());
+    if (combo) moodsToMatch = moodsToMatch.concat(combo.toLowerCase().split(','));
+
+    // Find recommendations matching any of these moods
+    const recs = await Recommendation.find({
+      moods: { $in: moodsToMatch }
+    });
+
+    if (recs.length === 0) {
+      return res.json({ message: 'No recommendations found for these moods.' });
+    }
+
+    // Combine all matched recommendations
+    const combined = {
+      music: [],
+      food: [],
+      activities: [],
+      breathWork: []
+    };
+    recs.forEach(r => {
+      combined.music.push(...r.music);
+      combined.food.push(...r.food);
+      combined.activities.push(...r.activities);
+      combined.breathWork.push(...r.breathWork);
+    });
+
+    // Remove duplicates
+    for (let key in combined) {
+      combined[key] = [...new Set(combined[key])];
+    }
+
+    res.json({ moods: moodsToMatch, recommendations: combined });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get articles by category
+app.get('/api/articles', async (req, res) => {
+  try {
+    const category = req.query.category?.toLowerCase();
+    const filter = category ? { category } : {};
+    const articles = await Article.find(filter);
+    res.json(articles);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Breath work instructions endpoint
+app.get('/api/breathwork', (req, res) => {
   res.json({
-    user,
-    currentMood: moods.join(','),
-    nextMood,
-    music: `https://open.spotify.com/playlist/${music}`,
-    food,
-    mantra,
-    breathwork,
-    activity,
-    cosmicTag
+    breathWorkExercises: [
+      { name: '4-7-8 Breathing', description: 'Inhale for 4 seconds, hold for 7, exhale for 8.' },
+      { name: 'Box Breathing', description: 'Inhale 4s, hold 4s, exhale 4s, hold 4s.' },
+      { name: 'Energizing Breath', description: 'Quick inhales and exhales for 30 seconds.' },
+    ]
   });
 });
 
-app.get("/cosmic-today", (req, res) => {
-  // For now, a simple static message
-  res.json({ cosmicTag: "Today’s energy feels calm and grounded." });
-});
+// Add more routes as needed: user registration, zodiac calculation, biometrics input, Spotify playlist retrieval, etc.
 
-app.listen(PORT, () => console.log(`Listening on ${PORT}`));
+// ===== Start server =====
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Backend server running on port ${PORT}`);
+});
