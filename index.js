@@ -185,4 +185,9 @@ app.post('/shift', (req, res) => {
   });
 });
 
+app.get("/cosmic-today", (req, res) => {
+  // For now, a simple static message
+  res.json({ cosmicTag: "Today’s energy feels calm and grounded." });
+});
+
 app.listen(PORT, () => console.log(`Listening on ${PORT}`));
